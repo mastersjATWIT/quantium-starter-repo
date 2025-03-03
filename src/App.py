@@ -1,130 +1,236 @@
-import dash
-from dash import dcc, html
-import plotly.express as px
-import pandas as pd
-from datetime import datetime
-import numpy as np
+import pandas
+from dash import Dash, html, dcc, Input, Output, callback
+from plotly.express import line
 
-# Load the processed data
-df = pd.read_csv('pink_morsel_sales.csv')
+# the path to the formatted data file
+DATA_PATH = "./formatted_data.csv"
 
-# Convert date string to datetime object
-df['date'] = pd.to_datetime(df['date'])
+# load in data
+data = pandas.read_csv(DATA_PATH)
+data = data.sort_values(by="date")
 
-# Sort by date
-df = df.sort_values('date')
+# initialize dash with external stylesheets
+dash_app = Dash(__name__)
 
-# Create a new DataFrame with daily total sales
-daily_sales = df.groupby('date')['sales'].sum().reset_index()
-
-# Create the Dash app
-app = dash.Dash(__name__)
-
-# Define the app layout
-app.layout = html.Div([
-    # Header
-    html.H1("Soul Foods Pink Morsel Sales Analysis", 
-            style={'textAlign': 'center', 'color': '#E91E63', 'marginBottom': 30}),
-    
-    html.Div([
-        # Description with price increase information
-        html.Div([
-            html.H3("Sales Before and After Price Increase (January 15, 2021)", 
-                   style={'color': '#555', 'marginBottom': 20}),
-            html.P("This dashboard visualizes Pink Morsel sales data to analyze the impact of the price increase.",
-                  style={'marginBottom': 20})
-        ], style={'marginBottom': 20}),
-        
-        # Line chart
-        dcc.Graph(
-            id='sales-line-chart',
-            figure=px.line(
-                daily_sales, 
-                x='date', 
-                y='sales',
-                title='Daily Pink Morsel Sales',
-                labels={'date': 'Date', 'sales': 'Sales ($)'},
-                template='plotly_white'
-            ).update_layout(
-                # Add a vertical line to indicate the price increase date
-                shapes=[
-                    dict(
-                        type="line",
-                        xref="x",
-                        yref="paper",
-                        x0="2021-01-15",
-                        y0=0,
-                        x1="2021-01-15",
-                        y1=1,
-                        line=dict(
-                            color="red",
-                            width=2,
-                            dash="dash",
+# Define the app layout with added region filter
+dash_app.layout = html.Div(
+    [
+        html.Div(
+            [
+                html.H1(
+                    "Pink Morsel Visualizer",
+                    id="header"
+                ),
+                html.P(
+                    "Explore sales performance across different regions",
+                    className="subtitle"
+                )
+            ],
+            className="header-container"
+        ),
+        html.Div(
+            [
+                html.Div(
+                    [
+                        html.H3("Filter by Region"),
+                        dcc.RadioItems(
+                            id='region-filter',
+                            options=[
+                                {'label': 'All Regions', 'value': 'all'},
+                                {'label': 'North', 'value': 'north'},
+                                {'label': 'East', 'value': 'east'},
+                                {'label': 'South', 'value': 'south'},
+                                {'label': 'West', 'value': 'west'}
+                            ],
+                            value='all',
+                            className="radio-items"
                         )
-                    )
-                ],
-                annotations=[
-                    dict(
-                        x="2021-01-15",
-                        y=1.05,
-                        xref="x",
-                        yref="paper",
-                        text="Price Increase",
-                        showarrow=False,
-                        font=dict(color="red")
-                    )
-                ]
+                    ],
+                    className="filter-container"
+                ),
+                html.Div(
+                    [
+                        dcc.Graph(
+                            id="visualization"
+                        )
+                    ],
+                    className="chart-container"
+                )
+            ],
+            className="content-container"
+        )
+    ],
+    className="main-container"
+)
+
+# Callback to update the chart based on the selected region
+@callback(
+    Output('visualization', 'figure'),
+    Input('region-filter', 'value')
+)
+def update_figure(selected_region):
+    if selected_region == 'all':
+        filtered_data = data
+        title = "Pink Morsel Sales - All Regions"
+    else:
+        filtered_data = data[data['region'] == selected_region]
+        title = f"Pink Morsel Sales - {selected_region.capitalize()} Region"
+    
+    fig = line(
+        filtered_data, 
+        x="date", 
+        y="sales", 
+        title=title,
+        color_discrete_sequence=['#ff69b4'],  # Pink color for the line
+        template="plotly_white"
+    )
+    
+    # Customize the figure layout
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(
+            family="Arial, sans-serif",
+            size=14,
+            color="#333333"
+        ),
+        title=dict(
+            font=dict(
+                size=20,
+                color="#333333"
             )
         ),
-        
-        # Additional insights section
-        html.Div([
-            html.H3("Analysis Insights", style={'marginTop': 30, 'marginBottom': 15}),
+        xaxis=dict(
+            title="Date",
+            tickfont=dict(size=12),
+            gridcolor="#f0f0f0"
+        ),
+        yaxis=dict(
+            title="Sales",
+            tickfont=dict(size=12),
+            gridcolor="#f0f0f0"
+        ),
+        margin=dict(l=40, r=40, t=60, b=40),
+        hovermode="closest"
+    )
+    
+    return fig
+
+# Add custom CSS
+dash_app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>Pink Morsel Visualizer</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            body {
+                font-family: 'Arial', sans-serif;
+                margin: 0;
+                padding: 0;
+                background-color: #f9f1f5;
+                color: #333333;
+            }
             
-            # Calculate and display average sales before and after
-            html.Div(id='sales-comparison')
-        ])
-    ], style={'width': '80%', 'margin': 'auto'})
-])
+            .main-container {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            
+            .header-container {
+                text-align: center;
+                margin-bottom: 30px;
+                background-color: white;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                border-bottom: 4px solid #ff69b4;
+            }
+            
+            #header {
+                margin: 0;
+                color: #ff69b4;
+                font-size: 36px;
+                letter-spacing: 1px;
+            }
+            
+            .subtitle {
+                color: #888;
+                font-size: 16px;
+                margin-top: 5px;
+            }
+            
+            .content-container {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 20px;
+            }
+            
+            .filter-container {
+                background-color: white;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                flex: 1;
+                min-width: 200px;
+            }
+            
+            .chart-container {
+                background-color: white;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+                flex: 3;
+                min-width: 300px;
+            }
+            
+            .radio-items {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                margin-top: 15px;
+            }
+            
+            .radio-items label {
+                padding: 8px 12px;
+                border-radius: 5px;
+                transition: background-color 0.2s;
+                cursor: pointer;
+            }
+            
+            .radio-items label:hover {
+                background-color: #ffe6f2;
+            }
+            
+            h3 {
+                margin-top: 0;
+                color: #ff69b4;
+                border-bottom: 2px solid #ffd1e6;
+                padding-bottom: 10px;
+            }
+            
+            @media (max-width: 768px) {
+                .content-container {
+                    flex-direction: column;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
 
-# Add callback to compute and display insights
-@app.callback(
-    dash.dependencies.Output('sales-comparison', 'children'),
-    dash.dependencies.Input('sales-line-chart', 'figure')
-)
-def update_sales_comparison(_):
-    # Get the price increase date
-    price_increase_date = pd.to_datetime('2021-01-15')
-    
-    # Calculate average daily sales before and after price increase
-    sales_before = daily_sales[daily_sales['date'] < price_increase_date]['sales'].mean()
-    sales_after = daily_sales[daily_sales['date'] >= price_increase_date]['sales'].mean()
-    
-    # Calculate percentage change
-    pct_change = ((sales_after - sales_before) / sales_before) * 100
-    
-    # Determine if sales increased or decreased
-    change_direction = "increased" if pct_change > 0 else "decreased"
-    
-    return [
-        html.P([
-            html.Strong("Average Daily Sales Before Price Increase: "), 
-            f"${sales_before:.2f}"
-        ]),
-        html.P([
-            html.Strong("Average Daily Sales After Price Increase: "), 
-            f"${sales_after:.2f}"
-        ]),
-        html.P([
-            html.Strong("Percentage Change: "), 
-            f"{pct_change:.2f}% {change_direction}"
-        ]),
-        html.P([
-            html.Strong("Conclusion: "), 
-            f"Sales {'were higher' if sales_after > sales_before else 'were lower'} after the price increase on January 15, 2021."
-        ], style={'marginTop': 15, 'fontSize': '18px', 'fontWeight': 'bold'})
-    ]
-
-# Run the app
+# this is only true if the module is executed as the program entrypoint
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    dash_app.run_server(debug=True)
